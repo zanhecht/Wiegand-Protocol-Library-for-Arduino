@@ -24,7 +24,7 @@ int WIEGAND::getWiegandType()
 bool WIEGAND::available()
 {
 	bool ret;
-    noInterrupts();
+	noInterrupts();
 	ret=DoWiegandConversion();
 	interrupts();
 	return ret;
@@ -32,15 +32,10 @@ bool WIEGAND::available()
 
 void WIEGAND::begin()
 {
-#ifdef digitalPinToInterrupt
-  // newer versions of Arduino provide pin to interrupt mapping
-  begin(2,digitalPinToInterrupt(2),3,digitalPinToInterrupt(3));
-#else
-  begin(2,0,3,1);
-#endif
+	begin(2,3);
 }
 
-void WIEGAND::begin(int pinD0, int pinIntD0, int pinD1, int pinIntD1)
+void WIEGAND::begin(int pinD0, int pinD1)
 {
 	_lastWiegand = 0;
 	_cardTempHigh = 0;
@@ -50,8 +45,9 @@ void WIEGAND::begin(int pinD0, int pinIntD0, int pinD1, int pinIntD1)
 	_bitCount = 0;  
 	pinMode(pinD0, INPUT);					// Set D0 pin as input
 	pinMode(pinD1, INPUT);					// Set D1 pin as input
-	attachInterrupt(pinIntD0, ReadD0, FALLING);	// Hardware interrupt - high to low pulse
-	attachInterrupt(pinIntD1, ReadD1, FALLING);	// Hardware interrupt - high to low pulse
+	
+	attachInterrupt(digitalPinToInterrupt(pinD0), ReadD0, FALLING);  // Hardware interrupt - high to low pulse
+	attachInterrupt(digitalPinToInterrupt(pinD1), ReadD1, FALLING);  // Hardware interrupt - high to low pulse
 }
 
 void WIEGAND::ReadD0 ()
@@ -90,32 +86,31 @@ void WIEGAND::ReadD1()
 
 unsigned long WIEGAND::GetCardId (volatile unsigned long *codehigh, volatile unsigned long *codelow, char bitlength)
 {
-	unsigned long cardID=0;
 
 	if (bitlength==26)								// EM tag
-		cardID = (*codelow & 0x1FFFFFE) >>1;
+	return (*codelow & 0x1FFFFFE) >>1;
 
 	if (bitlength==34)								// Mifare 
 	{
 		*codehigh = *codehigh & 0x03;				// only need the 2 LSB of the codehigh
 		*codehigh <<= 30;							// shift 2 LSB to MSB		
 		*codelow >>=1;
-		cardID = *codehigh | *codelow;
+		return *codehigh | *codelow;
 	}
-	return cardID;
+	return *codelow;								// EM tag or Mifare without parity bits
 }
 
 char translateEnterEscapeKeyPress(char originalKeyPress) {
-    switch(originalKeyPress) {
-        case 0x0b:        // 11 or * key
-            return 0x0d;  // 13 or ASCII ENTER
+	switch(originalKeyPress) {
+	case 0x0b:        // 11 or * key
+		return 0x0d;  // 13 or ASCII ENTER
 
-        case 0x0a:        // 10 or # key
-            return 0x1b;  // 27 or ASCII ESCAPE
+	case 0x0a:        // 10 or # key
+		return 0x1b;  // 27 or ASCII ESCAPE
 
-        default:
-            return originalKeyPress;
-    }
+	default:
+		return originalKeyPress;
+	}
 }
 
 bool WIEGAND::DoWiegandConversion ()
@@ -125,23 +120,13 @@ bool WIEGAND::DoWiegandConversion ()
 	
 	if ((sysTick - _lastWiegand) > 25)								// if no more signal coming through after 25ms
 	{
-		if ((_bitCount==26) || (_bitCount==34) || (_bitCount==8) || (_bitCount==4)) 	// bitCount for keypress=4 or 8, Wiegand 26=26, Wiegand 34=34
+		if ((_bitCount==24) || (_bitCount==26) || (_bitCount==32) || (_bitCount==34) || (_bitCount==8) || (_bitCount==4)) 	// bitCount for keypress=4 or 8, Wiegand 26=24 or 26, Wiegand 34=32 or 34
 		{
 			_cardTemp >>= 1;			// shift right 1 bit to get back the real value - interrupt done 1 left shift in advance
 			if (_bitCount>32)			// bit count more than 32 bits, shift high bits right to make adjustment
-				_cardTempHigh >>= 1;	
+			_cardTempHigh >>= 1;	
 
-			if((_bitCount==26) || (_bitCount==34))		// wiegand 26 or wiegand 34
-			{
-				cardID = GetCardId (&_cardTempHigh, &_cardTemp, _bitCount);
-				_wiegandType=_bitCount;
-				_bitCount=0;
-				_cardTemp=0;
-				_cardTempHigh=0;
-				_code=cardID;
-				return true;				
-			}
-			else if (_bitCount==8)		// keypress wiegand with integrity
+			if (_bitCount==8)		// keypress wiegand with integrity
 			{
 				// 8-bit Wiegand keyboard data, high nibble is the "NOT" of low nibble
 				// eg if key 1 pressed, data=E1 in binary 11100001 , high nibble=1110 , low nibble = 0001 
@@ -153,25 +138,42 @@ bool WIEGAND::DoWiegandConversion ()
 				_cardTempHigh=0;
 				
 				if (lowNibble == (~highNibble & 0x0f))		// check if low nibble matches the "NOT" of high nibble.
-                {
-                    _code = (int)translateEnterEscapeKeyPress(lowNibble);
+				{
+					_code = (int)translateEnterEscapeKeyPress(lowNibble);
 					return true;
 				}
+				else {
+					_lastWiegand=sysTick;
+					_bitCount=0;
+					_cardTemp=0;
+					_cardTempHigh=0;
+					return false;
+				}
 
-                // TODO: Handle validation failure case!
+				// TODO: Handle validation failure case!
 			}
-            else if (4 == _bitCount) {
-                // 4-bit Wiegand codes have no data integrity check so we just
-                // read the LOW nibble.
-                _code = (int)translateEnterEscapeKeyPress(_cardTemp & 0x0000000F);
+			else if (4 == _bitCount) {
+				// 4-bit Wiegand codes have no data integrity check so we just
+				// read the LOW nibble.
+				_code = (int)translateEnterEscapeKeyPress(_cardTemp & 0x0000000F);
 
-                _wiegandType = _bitCount;
-                _bitCount = 0;
-                _cardTemp = 0;
-                _cardTempHigh = 0;
+				_wiegandType = _bitCount;
+				_bitCount = 0;
+				_cardTemp = 0;
+				_cardTempHigh = 0;
 
-                return true;
-            }
+				return true;
+			}
+			else		// wiegand 26 or wiegand 34
+			{
+				cardID = GetCardId (&_cardTempHigh, &_cardTemp, _bitCount);
+				_wiegandType=_bitCount;
+				_bitCount=0;
+				_cardTemp=0;
+				_cardTempHigh=0;
+				_code=cardID;
+				return true;
+			}
 		}
 		else
 		{
@@ -184,5 +186,5 @@ bool WIEGAND::DoWiegandConversion ()
 		}	
 	}
 	else
-		return false;
+	return false;
 }
