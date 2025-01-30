@@ -97,19 +97,12 @@ unsigned long WIEGAND::GetCardId (volatile unsigned long *codehigh, volatile uns
 	if (bitlength==26)								// EM tag
 		return (*codelow & 0x1FFFFFE) >>1;
 
-	if (bitlength==24)
-		return (*codelow & 0x7FFFFE) >>1;
-
 	if (bitlength==34)								// Mifare 
 	{
 		*codehigh = *codehigh & 0x03;				// only need the 2 LSB of the codehigh
 		*codehigh <<= 30;							// shift 2 LSB to MSB		
 		*codelow >>=1;
 		return *codehigh | *codelow;
-	}
-
-	if (bitlength==32) {
-		return (*codelow & 0x7FFFFFFE ) >>1;
 	}
 
 	return *codelow;								// EM tag or Mifare without parity bits
