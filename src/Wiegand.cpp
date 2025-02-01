@@ -140,25 +140,23 @@ bool WIEGAND::DoWiegandConversion ()
 				// eg if key 1 pressed, data=E1 in binary 11100001 , high nibble=1110 , low nibble = 0001 
 				char highNibble = (_cardTemp & 0xf0) >>4;
 				char lowNibble = (_cardTemp & 0x0f);
-				_wiegandType=_bitCount;					
+				
+				if (lowNibble == (~highNibble & 0x0f))		// check if low nibble matches the "NOT" of high nibble.
+				{	//Valid 8-bit code, return as if 4-bit
+					_code = (int)translateEnterEscapeKeyPress(lowNibble);
+					wiegandType = 4;
+				}
+				else {	//Assume two 4-bit codes within 25ms, return 8 bits (receiving code will have to decode these)
+					highNibble = translateEnterEscapeKeyPress(highNibble);
+					lowNibble = translateEnterEscapeKeyPress(lowNibble);
+					_code = (int)((highNibble << 4) | (lowNibble & 0xF));
+					wiegandType=_bitCount;
+				}
+				
 				_bitCount=0;
 				_cardTemp=0;
 				_cardTempHigh=0;
-				
-				if (lowNibble == (~highNibble & 0x0f))		// check if low nibble matches the "NOT" of high nibble.
-				{
-					_code = (int)translateEnterEscapeKeyPress(lowNibble);
-					return true;
-				}
-				else {
-					_lastWiegand=sysTick;
-					_bitCount=0;
-					_cardTemp=0;
-					_cardTempHigh=0;
-					return false;
-				}
-
-				// TODO: Handle validation failure case!
+				return true;
 			}
 			else if (4 == _bitCount) {
 				// 4-bit Wiegand codes have no data integrity check so we just
