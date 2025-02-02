@@ -1,13 +1,5 @@
 #include "Wiegand.h"
 
-#if defined(ESP8266)
-    #define INTERRUPT_ATTR ICACHE_RAM_ATTR
-#elif defined(ESP32)
-	#define INTERRUPT_ATTR IRAM_ATTR
-#else
-    #define INTERRUPT_ATTR
-#endif
-
 volatile unsigned long WIEGAND::_cardTempHigh=0;
 volatile unsigned long WIEGAND::_cardTemp=0;
 volatile unsigned long WIEGAND::_lastWiegand=0;
@@ -58,7 +50,7 @@ void WIEGAND::begin(int pinD0, int pinD1)
 	attachInterrupt(digitalPinToInterrupt(pinD1), ReadD1, FALLING);  // Hardware interrupt - high to low pulse
 }
 
-INTERRUPT_ATTR void WIEGAND::ReadD0 ()
+void WIEGAND::ReadD0 ()
 {
 	_bitCount++;				// Increament bit count for Interrupt connected to D0
 	if (_bitCount>31)			// If bit count more than 31, process high bits
@@ -74,7 +66,7 @@ INTERRUPT_ATTR void WIEGAND::ReadD0 ()
 	_lastWiegand = millis();	// Keep track of last wiegand bit received
 }
 
-INTERRUPT_ATTR void WIEGAND::ReadD1()
+void WIEGAND::ReadD1()
 {
 	_bitCount ++;				// Increment bit count for Interrupt connected to D1
 	if (_bitCount>31)			// If bit count more than 31, process high bits
@@ -94,8 +86,9 @@ INTERRUPT_ATTR void WIEGAND::ReadD1()
 
 unsigned long WIEGAND::GetCardId (volatile unsigned long *codehigh, volatile unsigned long *codelow, char bitlength)
 {
+
 	if (bitlength==26)								// EM tag
-		return (*codelow & 0x1FFFFFE) >>1;
+	return (*codelow & 0x1FFFFFE) >>1;
 
 	if (bitlength==34)								// Mifare 
 	{
@@ -104,7 +97,6 @@ unsigned long WIEGAND::GetCardId (volatile unsigned long *codehigh, volatile uns
 		*codelow >>=1;
 		return *codehigh | *codelow;
 	}
-
 	return *codelow;								// EM tag or Mifare without parity bits
 }
 
@@ -132,7 +124,7 @@ bool WIEGAND::DoWiegandConversion ()
 		{
 			_cardTemp >>= 1;			// shift right 1 bit to get back the real value - interrupt done 1 left shift in advance
 			if (_bitCount>32)			// bit count more than 32 bits, shift high bits right to make adjustment
-				_cardTempHigh >>= 1;
+			_cardTempHigh >>= 1;	
 
 			if (_bitCount==8)		// keypress wiegand with integrity
 			{
@@ -142,17 +134,14 @@ bool WIEGAND::DoWiegandConversion ()
 				char lowNibble = (_cardTemp & 0x0f);
 				
 				if (lowNibble == (~highNibble & 0x0f))		// check if low nibble matches the "NOT" of high nibble.
-				{	//Valid 8-bit code, return as if 4-bit
+				{		//Valid 8-bit code
 					_code = (int)translateEnterEscapeKeyPress(lowNibble);
-					wiegandType = 4;
 				}
-				else {	//Assume two 4-bit codes within 25ms, return 8 bits (receiving code will have to decode these)
-					highNibble = translateEnterEscapeKeyPress(highNibble);
-					lowNibble = translateEnterEscapeKeyPress(lowNibble);
-					_code = (int)((highNibble << 4) | (lowNibble & 0xF));
-					wiegandType=_bitCount;
+				else {          //Assume two 4-bit codes within 25ms
+					_code = (int)(_cardTemp);
 				}
 				
+				_wiegandType=_bitCount;	
 				_bitCount=0;
 				_cardTemp=0;
 				_cardTempHigh=0;
@@ -192,5 +181,5 @@ bool WIEGAND::DoWiegandConversion ()
 		}	
 	}
 	else
-	return false;
+		return false;
 }
