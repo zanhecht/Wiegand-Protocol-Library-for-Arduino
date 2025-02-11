@@ -173,7 +173,7 @@ bool WIEGAND::DoWiegandConversion ()
 			else		// wiegand 26 or wiegand 34
 			{
 				cardID = GetCardId (&_cardTempHigh, &_cardTemp, _bitCount);
-				_wiegandType=_bitCount;
+				_wiegandType= _bitCount==24 ? 26 : (_bitCount==32 ? 34 : _bitCount);
 				_bitCount=0;
 				_cardTemp=0;
 				_cardTempHigh=0;
