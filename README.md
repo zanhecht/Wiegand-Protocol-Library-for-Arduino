@@ -2,6 +2,17 @@
 
 The Wiegand interface is a de facto standard commonly used to connect a card reader or keypad to an electronic entry system. Wiegand interface has the ability to transmit signal over long distance with a simple 3 wires connection. This library uses interrupt pins from Arduino to read the pulses from Wiegand interface and return the code and type of the Wiegand.
 
+## Differences from Monkeyboard version
+This version of the library is forked from [Wiegand library](https://github.com/monkeyboard/Wiegand-Protocol-Library-for-Arduino) with two changes:
+
+* 24- and 32-bit codes are assumed to be 26- and 34- bit codes with the parity bits already stripped off by the reader.
+  * 24- and 32-bit codes are returned as-is as type 26 and 34, respectively. No bits are removed (the original library would only return the middle 22 or 30 bits).
+* Valid 8-bit Wiegand codes are just 4-bit codes, but the first 4 bits are parity bits that are the inverse of the last 4 bits. This library handles them slightly differently than the original:
+  * If the parity bits match, the last 4 bits are returned as a type 4 code (the original library returned them as a type 8).
+  * If the parity bits don't match, they are assumed to be two sequential 4-bit codes and all 8 bits are returned as a type 8 code (the original library would not return these at all). The program that uses this library is responsible for splitting type 8 codes into the first 4 and last 4 bits.
+
+The below documentation is copied from the original library:
+
 # Different Wiegand libraries comparison
 
 | Library | Description |
